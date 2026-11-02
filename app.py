@@ -1,3 +1,15 @@
+import streamlit as st
+import streamlit.components.v1 as components
+
+# Streamlit 페이지 기본 설정
+st.set_page_config(
+    page_title="AI 마피아 게임 사회자 패널",
+    page_icon="🕵️",
+    layout="wide"
+)
+
+# HTML/CSS/JavaScript 코드 (Python 삼중 따옴표 문자열 내부에 작성)
+html_code = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -28,8 +40,6 @@
       display: flex;
       flex-direction: column;
       gap: 20px;
-      max-width: 1400px;
-      margin: 0 auto;
     }
 
     h1, h2, h3 {
@@ -159,7 +169,7 @@
       padding: 15px;
       display: flex;
       flex-direction: column;
-      height: 600px;
+      height: 550px;
     }
 
     .log-messages {
@@ -209,7 +219,7 @@
         <label>경찰:</label>
         <input type="number" id="count-police" value="1" min="0" max="3">
       </div>
-      <button class="btn btn-primary" id="btn-reset" onclick="initGame()">게임 새로고침 / 설정 완료</button>
+      <button class="btn btn-primary" id="btn-reset" onclick="initGame()">게임 리셋</button>
     </div>
   </header>
 
@@ -221,18 +231,18 @@
 
   <div class="main-content">
     <div>
-      <h3>참여 플레이어 목록 (사회자 시점)</h3>
+      <h3>참여 플레이어 (사회자 시점)</h3>
       <br>
       <div class="grid-players" id="player-grid"></div>
     </div>
 
     <div class="log-container">
-      <h3>게임 진행 및 토론 로그</h3>
+      <h3>진행 및 AI 대화 로그</h3>
       <div class="log-messages" id="log-box"></div>
 
       <div class="controls-panel">
         <button class="btn btn-warning" id="btn-night" onclick="processNight()">🌙 밤 행동 실행</button>
-        <button class="btn btn-success" id="btn-discuss" onclick="processDiscussion()" disabled>🗣️ AI 토론 진행</button>
+        <button class="btn btn-success" id="btn-discuss" onclick="processDiscussion()" disabled>🗣️ AI 토론 시작</button>
         <button class="btn btn-danger" id="btn-vote" onclick="processVote()" disabled>🗳️ 투표 진행</button>
       </div>
     </div>
@@ -241,13 +251,7 @@
   <script>
     const TOTAL_PLAYERS = 20;
     let players = [];
-    let gameState = {
-      day: 1,
-      phase: 'NIGHT', // NIGHT, DAY_DISCUSS, DAY_VOTE
-      mafiaTarget: null,
-      doctorTarget: null,
-      policeTarget: null
-    };
+    let gameState = { day: 1, phase: 'NIGHT', mafiaTarget: null, doctorTarget: null, policeTarget: null };
 
     function log(msg, type = 'system') {
       const box = document.getElementById('log-box');
@@ -268,29 +272,26 @@
         return;
       }
 
-      // 직업 생성
       let roles = [];
       for(let i=0; i<mafiaCnt; i++) roles.push('마피아');
       for(let i=0; i<docCnt; i++) roles.push('의사');
       for(let i=0; i<polCnt; i++) roles.push('경찰');
       while(roles.length < TOTAL_PLAYERS) roles.push('시민');
 
-      // 셔플
       roles.sort(() => Math.random() - 0.5);
 
       players = Array.from({length: TOTAL_PLAYERS}, (_, i) => ({
         id: i + 1,
         name: `플레이어 ${i + 1}`,
         role: roles[i],
-        isAlive: true,
-        suspicion: {} // 다른 사람에 대한 의심도
+        isAlive: true
       }));
 
       gameState = { day: 1, phase: 'NIGHT', mafiaTarget: null, doctorTarget: null, policeTarget: null };
 
       document.getElementById('log-box').innerHTML = '';
-      log(`🎮 게임이 시작되었습니다! 총 20명 (마피아 ${mafiaCnt}, 의사 ${docCnt}, 경찰 ${polCnt}, 시민 ${TOTAL_PLAYERS - mafiaCnt - docCnt - polCnt})`);
-      log(`🌙 첫 번째 밤이 시작되었습니다. 사회자는 [밤 행동 실행] 버튼을 눌러주세요.`);
+      log(`🎮 게임 시작! 총 20명 (마피아 ${mafiaCnt}, 의사 ${docCnt}, 경찰 ${polCnt}, 시민 ${TOTAL_PLAYERS - mafiaCnt - docCnt - polCnt})`);
+      log(`🌙 첫 번째 밤입니다. [밤 행동 실행] 버튼을 눌러주세요.`);
 
       updateUI();
     }
@@ -356,40 +357,34 @@
     }
 
     function processNight() {
-      log(`🔒 밤 동안 능력자들이 행동을 취합니다...`, 'secret');
+      log(`🔒 밤 동안 특수 직업들이 행동을 취합니다...`, 'secret');
 
-      // 마피아 공격 Target 지정
       const mafiaTarget = getRandomAlivePlayer(['마피아']);
       gameState.mafiaTarget = mafiaTarget ? mafiaTarget.id : null;
-      if (mafiaTarget) {
-        log(`[비밀] 마피아가 ${mafiaTarget.name}님을 표적으로 지목했습니다.`, 'secret');
-      }
+      if (mafiaTarget) log(`[비밀] 마피아가 ${mafiaTarget.name}님을 표적으로 지목했습니다.`, 'secret');
 
-      // 의사 Save Target 지정
       const doctor = players.find(p => p.role === '의사' && p.isAlive);
       if (doctor) {
         const docTarget = getRandomAlivePlayer();
         gameState.doctorTarget = docTarget ? docTarget.id : null;
-        log(`[비밀] 의사가 ${docTarget.name}님을 치료 대상으로 선택했습니다.`, 'secret');
+        log(`[비밀] 의사가 ${docTarget.name}님을 치료 대상으로 지목했습니다.`, 'secret');
       }
 
-      // 경찰 Investigation
       const police = players.find(p => p.role === '경찰' && p.isAlive);
       if (police) {
         const polTarget = getRandomAlivePlayer(['경찰']);
         if (polTarget) {
-          log(`[비밀] 경찰이 ${polTarget.name}님을 조사했습니다. (결과: ${polTarget.role === '마피아' ? '마피아 맞음 🚨' : '시민/선량함 🟢'})`, 'secret');
+          log(`[비밀] 경찰이 ${polTarget.name}님을 조사했습니다. (결과: ${polTarget.role === '마피아' ? '마피아 🚨' : '시민/선량 🟢'})`, 'secret');
         }
       }
 
-      // 결과 처리
       log(`☀️ 날이 밝았습니다.`);
       if (gameState.mafiaTarget && gameState.mafiaTarget !== gameState.doctorTarget) {
         const deadPlayer = players.find(p => p.id === gameState.mafiaTarget);
         deadPlayer.isAlive = false;
-        log(`💥 지난 밤, ${deadPlayer.name}님이 마피아의 공격을 받고 사망하셨습니다.`, 'system');
+        log(`💥 지난 밤, ${deadPlayer.name}님이 사망하셨습니다.`, 'system');
       } else {
-        log(`🛡️ 지난 밤에는 아무도 사망하지 않았습니다. (의사의 치료 성공 또는 공격 실패)`, 'system');
+        log(`🛡️ 지난 밤에는 아무도 사망하지 않았습니다. (의사의 치료 성공)`, 'system');
       }
 
       if (checkGameOver()) return;
@@ -400,22 +395,21 @@
 
     function processDiscussion() {
       const alivePlayers = players.filter(p => p.isAlive);
-      log(`🗣️ 자유 토론이 시작되었습니다. (생존자 ${alivePlayers.length}명)`);
+      log(`🗣️ 자유 토론 시작!`);
 
-      // 랜덤으로 몇 명의 대화 생성
       const talkers = [...alivePlayers].sort(() => Math.random() - 0.5).slice(0, Math.min(4, alivePlayers.length));
 
       talkers.forEach(p => {
         let msg = "";
         const target = getRandomAlivePlayer();
         if (p.role === '마피아') {
-          msg = `저는 정직한 시민입니다. 오히려 ${target.name}님이 정황상 매우 의심스럽네요.`;
+          msg = `저는 시민입니다. ${target.name}님이 수상한 행동을 하더군요.`;
         } else if (p.role === '경찰') {
-          msg = `경찰로서 정황을 지켜보고 있습니다. ${target.name}님의 발언을 주의 깊게 살피는 중입니다.`;
+          msg = `경찰 조사를 토대로 주시하고 있는 인물이 있습니다.`;
         } else if (p.role === '의사') {
-          msg = `선량한 시민이 희생되지 않도록 신중하게 투표해야 합니다.`;
+          msg = `억울한 희생자가 나오지 않게 신중하게 표를 행사합시다.`;
         } else {
-          msg = `지목당한 ${target.name}님의 해명이 필요해보입니다. 무분별한 투표는 자제하죠.`;
+          msg = `${target.name}님의 발언이 조금 수상하게 느껴집니다.`;
         }
         log(`💬 <strong>${p.name}</strong>: "${msg}"`, 'chat');
       });
@@ -425,13 +419,12 @@
     }
 
     function processVote() {
-      log(`🗳️ 최후의 투표가 진행됩니다.`);
+      log(`🗳️ 투표 진행 중...`);
       const alivePlayers = players.filter(p => p.isAlive);
-      let votes = {}; // targetId: count
+      let votes = {};
       let invalidVotes = 0;
 
       alivePlayers.forEach(p => {
-        // 20% 확률로 무효표/기권
         if (Math.random() < 0.2) {
           invalidVotes++;
         } else {
@@ -440,7 +433,7 @@
         }
       });
 
-      log(`📊 투표 결과 (무효/기권표: ${invalidVotes}표)`);
+      log(`📊 투표 집계 결과 (무효/기권표: ${invalidVotes}표)`);
       
       let maxVotes = 0;
       let executedId = null;
@@ -459,18 +452,18 @@
       }
 
       if (isTie || !executedId) {
-        log(`⚖️ 동표 또는 무효표 과반으로 인해 아무도 처형되지 않았습니다.`, 'system');
+        log(`⚖️ 동표 또는 무효표 과반으로 처형자 없음.`, 'system');
       } else {
         const dead = players.find(p => p.id == executedId);
         dead.isAlive = false;
-        log(`⚖️ 투표 결과, 가장 많은 표(${maxVotes}표)를 받은 <strong>${dead.name}</strong>님이 처형되었습니다. (직업: ${dead.role})`, 'system');
+        log(`⚖️ 투표 결과, 가장 많은 표를 받은 <strong>${dead.name}</strong>님이 처형되었습니다. (직업: ${dead.role})`, 'system');
       }
 
       if (checkGameOver()) return;
 
       gameState.day++;
       gameState.phase = 'NIGHT';
-      log(`🌙 다시 밤이 찾아왔습니다. (다음 단계 진행)`);
+      log(`🌙 다시 밤이 찾아왔습니다.`);
       updateUI();
     }
 
@@ -483,7 +476,7 @@
         disableAllButtons();
         return true;
       } else if (aliveMafia >= aliveCitizen) {
-        log(`☠️ <strong>마피아팀 승리!</strong> 마피아가 도시를 점령했습니다!`, 'system');
+        log(`☠️ <strong>마피아팀 승리!</strong> 도시가 마피아에게 점령당했습니다!`, 'system');
         disableAllButtons();
         return true;
       }
@@ -496,8 +489,11 @@
       document.getElementById('btn-vote').disabled = true;
     }
 
-    // 초기화 실행
     window.onload = initGame;
   </script>
 </body>
 </html>
+"""
+
+# Streamlit에 컴포넌트로 HTML 삽입 (파이썬 에러 방지)
+components.html(html_code, height=850, scrolling=True)
