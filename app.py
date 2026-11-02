@@ -53,7 +53,7 @@ html_code = """
 
     .setup-panel {
       display: flex;
-      gap: 15px;
+      gap: 12px;
       align-items: center;
       flex-wrap: wrap;
     }
@@ -61,12 +61,12 @@ html_code = """
     .input-group {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
 
     input[type="number"] {
-      width: 60px;
-      padding: 6px 10px;
+      width: 55px;
+      padding: 6px 8px;
       border-radius: 6px;
       border: 1px solid var(--border-color);
       background-color: #0f172a;
@@ -136,7 +136,7 @@ html_code = """
     }
 
     .player-card.dead {
-      opacity: 0.4;
+      opacity: 0.35;
       background-color: #111;
       border-color: #444;
     }
@@ -147,7 +147,7 @@ html_code = """
     }
 
     .player-card .role {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       margin-top: 4px;
       padding: 2px 6px;
       border-radius: 4px;
@@ -155,6 +155,7 @@ html_code = """
     }
 
     .role-mafia { background: #881337; color: #fecdd3; }
+    .role-assassin { background: #581c87; color: #f0abfc; }
     .role-doctor { background: #065f46; color: #a7f3d0; }
     .role-police { background: #1e40af; color: #bfdbfe; }
     .role-citizen { background: #374151; color: #e5e7eb; }
@@ -176,7 +177,7 @@ html_code = """
       padding: 15px;
       display: flex;
       flex-direction: column;
-      height: 580px;
+      height: 600px;
     }
 
     .log-messages {
@@ -219,11 +220,15 @@ html_code = """
 <body>
 
   <header>
-    <h1>🕵️ AI 마피아 게임 사회자 패널</h1>
+    <h1>🕵️ AI 마피아 게임 사회자 패널 (암살자 패치)</h1>
     <div class="setup-panel">
       <div class="input-group">
         <label>마피아:</label>
         <input type="number" id="count-mafia" value="2" min="1" max="5">
+      </div>
+      <div class="input-group">
+        <label>암살자:</label>
+        <input type="number" id="count-assassin" value="1" min="0" max="3">
       </div>
       <div class="input-group">
         <label>의사:</label>
@@ -233,30 +238,30 @@ html_code = """
         <label>경찰:</label>
         <input type="number" id="count-police" value="1" min="0" max="3">
       </div>
-      <button class="btn btn-primary" id="btn-reset" onclick="initGame()">새 게임 / 설정 완료</button>
+      <button class="btn btn-primary" onclick="initGame()">새 게임 리셋</button>
     </div>
   </header>
 
   <div class="game-status-bar">
     <div>현재 단계: <span id="phase-text" class="phase-badge phase-night">밤</span></div>
     <div>일차: <span id="day-count">1</span>일차</div>
-    <div>생존자: <span id="alive-count">20</span> / 20명</div>
+    <div>표시 생존자: <span id="alive-count">20</span> / 20명</div>
   </div>
 
   <div class="main-content">
     <div>
-      <h3>참여 플레이어 목록 (사회자 시점)</h3>
+      <h3>참여 플레이어 목록 (사회자 전용 뷰)</h3>
       <br>
       <div class="grid-players" id="player-grid"></div>
     </div>
 
     <div class="log-container">
-      <h3>진행 및 실시간 대화 로그</h3>
+      <h3>진행 및 AI 토론 로그</h3>
       <div class="log-messages" id="log-box"></div>
 
       <div class="controls-panel">
         <button class="btn btn-warning" id="btn-night" onclick="processNight()">🌙 밤 행동 실행</button>
-        <button class="btn btn-success" id="btn-discuss" onclick="processDiscussion()" disabled>🗣️ AI 실시간 토론 시작</button>
+        <button class="btn btn-success" id="btn-discuss" onclick="processDiscussion()" disabled>🗣️ AI 토론 시작</button>
         <button class="btn btn-danger" id="btn-vote" onclick="processVote()" disabled>🗳️ 투표 진행</button>
       </div>
     </div>
@@ -272,7 +277,7 @@ html_code = """
     ];
 
     let players = [];
-    let gameState = { day: 1, phase: 'NIGHT', mafiaTarget: null, doctorTarget: null, policeTarget: null };
+    let gameState = { day: 1, phase: 'NIGHT' };
 
     function log(msg, type = 'system') {
       const box = document.getElementById('log-box');
@@ -285,16 +290,18 @@ html_code = """
 
     function initGame() {
       const mafiaCnt = parseInt(document.getElementById('count-mafia').value);
+      const assassinCnt = parseInt(document.getElementById('count-assassin').value);
       const docCnt = parseInt(document.getElementById('count-doctor').value);
       const polCnt = parseInt(document.getElementById('count-police').value);
 
-      if (mafiaCnt + docCnt + polCnt >= TOTAL_PLAYERS) {
+      if (mafiaCnt + assassinCnt + docCnt + polCnt >= TOTAL_PLAYERS) {
         alert("특수 직업의 합이 전체 인원수(20명)보다 작아야 합니다.");
         return;
       }
 
       let roles = [];
       for(let i=0; i<mafiaCnt; i++) roles.push('마피아');
+      for(let i=0; i<assassinCnt; i++) roles.push('암살자');
       for(let i=0; i<docCnt; i++) roles.push('의사');
       for(let i=0; i<polCnt; i++) roles.push('경찰');
       while(roles.length < TOTAL_PLAYERS) roles.push('시민');
@@ -305,15 +312,16 @@ html_code = """
         id: i + 1,
         name: NAMES[i],
         role: roles[i],
-        isAlive: true,
+        isRealAlive: true,        // 실제 생존 여부
+        isFakeAlive: true,        // 암살자에 의해 위장된 겉보기 생존 여부
         isRevealed: false
       }));
 
-      gameState = { day: 1, phase: 'NIGHT', mafiaTarget: null, doctorTarget: null, policeTarget: null };
+      gameState = { day: 1, phase: 'NIGHT' };
 
       document.getElementById('log-box').innerHTML = '';
-      log(`🎮 게임이 시작되었습니다! 총 20명 (마피아 ${mafiaCnt}, 의사 ${docCnt}, 경찰 ${polCnt}, 시민 ${TOTAL_PLAYERS - mafiaCnt - docCnt - polCnt})`);
-      log(`🌙 첫 번째 밤이 시작되었습니다. [밤 행동 실행] 버튼을 눌러주세요.`);
+      log(`🎮 게임 시작! 총 20명 (마피아 ${mafiaCnt}, 암살자 ${assassinCnt}, 의사 ${docCnt}, 경찰 ${polCnt}, 시민 ${TOTAL_PLAYERS - mafiaCnt - assassinCnt - docCnt - polCnt})`);
+      log(`🌙 첫 번째 밤이 찾아왔습니다.`);
 
       updateUI();
     }
@@ -322,29 +330,37 @@ html_code = """
       const grid = document.getElementById('player-grid');
       grid.innerHTML = '';
 
-      let aliveCnt = 0;
+      let fakeAliveCount = 0;
+
       players.forEach(p => {
-        if (p.isAlive) aliveCnt++;
+        if (p.isFakeAlive) fakeAliveCount++;
         const card = document.createElement('div');
-        card.className = `player-card ${p.isAlive ? '' : 'dead'} ${p.isRevealed ? 'revealed' : ''}`;
+        
+        // 시각적 표시 (사회자는 위장 사망도 알 수 있도록 표시)
+        const isDeadUI = !p.isFakeAlive;
+        card.className = `player-card ${isDeadUI ? 'dead' : ''} ${p.isRevealed ? 'revealed' : ''}`;
         
         let roleClass = 'role-citizen';
         if (p.role === '마피아') roleClass = 'role-mafia';
+        if (p.role === '암살자') roleClass = 'role-assassin';
         if (p.role === '의사') roleClass = 'role-doctor';
         if (p.role === '경찰') roleClass = 'role-police';
+
+        let statusText = p.isRealAlive ? '생존' : (p.isFakeAlive ? '생존 (암살위장 🤫)' : '사망');
+        let statusColor = p.isRealAlive ? '#4ade80' : (p.isFakeAlive ? '#c084fc' : '#f87171');
 
         card.innerHTML = `
           <strong>${p.name}</strong><br>
           <span class="role ${roleClass}">${p.role}</span><br>
           ${p.isRevealed ? '<span class="reveal-badge">📢 직업 공개됨</span><br>' : ''}
-          <div style="font-size:0.75rem; margin-top:5px; color:${p.isAlive ? '#4ade80' : '#f87171'}">
-            ${p.isAlive ? '생존' : '사망'}
+          <div style="font-size:0.75rem; margin-top:5px; color:${statusColor}">
+            ${statusText}
           </div>
         `;
         grid.appendChild(card);
       });
 
-      document.getElementById('alive-count').innerText = aliveCnt;
+      document.getElementById('alive-count').innerText = fakeAliveCount;
       document.getElementById('day-count').innerText = gameState.day;
 
       const phaseText = document.getElementById('phase-text');
@@ -373,61 +389,84 @@ html_code = """
       }
     }
 
-    function getRandomAlivePlayer(excludeRoles = [], excludeId = null) {
-      const candidates = players.filter(p => p.isAlive && !excludeRoles.includes(p.role) && p.id !== excludeId);
-      if (candidates.length === 0) return null;
-      return candidates[Math.floor(Math.random() * candidates.length)];
-    }
-
     function processNight() {
-      log(`🔒 밤 동안 능력을 가진 플레이어들이 행동합니다...`, 'secret');
+      log(`🔒 밤 동안 능력자들이 은밀히 움직입니다...`, 'secret');
 
-      // 마피아: 이미 밝혀진 경찰이나 의사가 아닌 일반 생존자나 미확인자를 타겟으로 똑똑하게 지목
-      const smartMafiaTargets = players.filter(p => p.isAlive && p.role !== '마피아' && (!p.isRevealed || p.role === '시민'));
-      const mafiaTarget = smartMafiaTargets.length > 0 
-        ? smartMafiaTargets[Math.floor(Math.random() * smartMafiaTargets.length)]
-        : getRandomAlivePlayer(['마피아']);
-        
-      gameState.mafiaTarget = mafiaTarget ? mafiaTarget.id : null;
-      if (mafiaTarget) log(`[비밀] 마피아가 <strong>${mafiaTarget.name}</strong>님을 타겟으로 조용히 노립니다.`, 'secret');
+      // 1. 지난 밤 암살 위장 사망자 진짜 사망 전환
+      players.forEach(p => {
+        if (!p.isRealAlive && p.isFakeAlive) {
+          p.isFakeAlive = false;
+          log(`💀 [뒤늦은 발견] 어제 밤 암살당한 <strong>${p.name}</strong>님의 시신이 뒤늦게 발견되었습니다!`, 'system');
+        }
+      });
 
-      // 의사
-      const doctor = players.find(p => p.role === '의사' && p.isAlive);
-      if (doctor) {
-        const docTarget = getRandomAlivePlayer();
-        gameState.doctorTarget = docTarget ? docTarget.id : null;
-        log(`[비밀] 의사가 <strong>${docTarget.name}</strong>님을 치료 대상으로 선택했습니다.`, 'secret');
+      // 2. 마피아 공격
+      const mafiaTargets = players.filter(p => p.isRealAlive && p.role !== '마피아' && p.role !== '암살자');
+      let mafiaKillId = null;
+      if (mafiaTargets.length > 0) {
+        const target = mafiaTargets[Math.floor(Math.random() * mafiaTargets.length)];
+        mafiaKillId = target.id;
+        log(`[비밀] 마피아가 <strong>${target.name}</strong>님을 표적으로 결정했습니다.`, 'secret');
       }
 
-      // 경찰 조사
-      const police = players.find(p => p.role === '경찰' && p.isAlive);
-      let policeRevealedPlayer = null;
-
-      if (police) {
-        const unrevealedCandidates = players.filter(p => p.isAlive && p.role !== '경찰' && !p.isRevealed);
-        const polTarget = unrevealedCandidates.length > 0 
-          ? unrevealedCandidates[Math.floor(Math.random() * unrevealedCandidates.length)]
-          : getRandomAlivePlayer(['경찰']);
-
-        if (polTarget) {
-          polTarget.isRevealed = true;
-          policeRevealedPlayer = polTarget;
-          log(`[비밀] 경찰이 <strong>${polTarget.name}</strong>님을 조사했습니다.`, 'secret');
+      // 3. 암살자 독자 공격 (위장 암살 능력)
+      const assassin = players.find(p => p.role === '암살자' && p.isRealAlive);
+      let assassinKillId = null;
+      if (assassin) {
+        const assTargets = players.filter(p => p.isRealAlive && p.role !== '암살자' && p.id !== mafiaKillId);
+        if (assTargets.length > 0) {
+          const aTarget = assTargets[Math.floor(Math.random() * assTargets.length)];
+          assassinKillId = aTarget.id;
+          log(`[비밀] 암살자가 <strong>${aTarget.name}</strong>님을 조용히 암살했습니다. (다음 밤 전까지 생존 위장!)`, 'secret');
         }
       }
 
-      log(`☀️ 아침이 밝았습니다.`);
-
-      if (policeRevealedPlayer) {
-        log(`📢 <strong>[경찰 조사 결과 발표]</strong> 밤사이 경찰의 추적으로 <strong>${policeRevealedPlayer.name}</strong>님의 신원이 <strong>[ ${policeRevealedPlayer.role} ]</strong>(으)로 만천하에 드러났습니다!`, 'reveal');
+      // 4. 의사 치료
+      const doctor = players.find(p => p.role === '의사' && p.isRealAlive);
+      let docSaveId = null;
+      if (doctor) {
+        const docTargets = players.filter(p => p.isRealAlive);
+        if (docTargets.length > 0) {
+          const dTarget = docTargets[Math.floor(Math.random() * docTargets.length)];
+          docSaveId = dTarget.id;
+          log(`[비밀] 의사가 <strong>${dTarget.name}</strong>님을 수술 치료했습니다.`, 'secret');
+        }
       }
 
-      if (gameState.mafiaTarget && gameState.mafiaTarget !== gameState.doctorTarget) {
-        const deadPlayer = players.find(p => p.id === gameState.mafiaTarget);
-        deadPlayer.isAlive = false;
-        log(`💥 지난 밤, <strong>${deadPlayer.name}</strong>님이 마피아의 습격을 받아 사망하셨습니다.`, 'system');
-      } else {
-        log(`🛡️ 지난 밤에는 아무도 사망하지 않았습니다. (의사의 완벽한 치료 성공)`, 'system');
+      // 5. 경찰 조사
+      const police = players.find(p => p.role === '경찰' && p.isRealAlive);
+      let policeRevealedPlayer = null;
+      if (police) {
+        const unrevealed = players.filter(p => p.isRealAlive && p.role !== '경찰' && !p.isRevealed);
+        if (unrevealed.length > 0) {
+          const polTarget = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+          polTarget.isRevealed = true;
+          policeRevealedPlayer = polTarget;
+          log(`[비밀] 경찰이 <strong>${polTarget.name}</strong>님을 수사했습니다.`, 'secret');
+        }
+      }
+
+      log(`☀️ 날이 밝았습니다.`);
+
+      // 결과 처리
+      if (policeRevealedPlayer) {
+        log(`📢 <strong>[경찰 신원 공개]</strong> <strong>${policeRevealedPlayer.name}</strong>님의 직업은 <strong>[ ${policeRevealedPlayer.role} ]</strong> 입니다!`, 'reveal');
+      }
+
+      // 마피아 공격 처리
+      if (mafiaKillId && mafiaKillId !== docSaveId) {
+        const deadP = players.find(p => p.id === mafiaKillId);
+        deadP.isRealAlive = false;
+        deadP.isFakeAlive = false;
+        log(`💥 지난밤 <strong>${deadP.name}</strong>님이 습격당해 사망하셨습니다.`, 'system');
+      }
+
+      // 암살자 공격 처리 (위장 유지)
+      if (assassinKillId && assassinKillId !== docSaveId) {
+        const deadA = players.find(p => p.id === assassinKillId);
+        deadA.isRealAlive = false;
+        // isFakeAlive는 그대로 true 유지 (다음 밤전까지 로그에 안 뜸)
+        log(`🤫 (암살 암시) 마을 어디선가 묘한 이질감이 느껴집니다...`, 'secret');
       }
 
       if (checkGameOver()) return;
@@ -436,90 +475,97 @@ html_code = """
       updateUI();
     }
 
-    // AI 실시간 토론 (반박, 동선 추궁, 논리적 대화 강화)
     function processDiscussion() {
-      const alivePlayers = players.filter(p => p.isAlive);
-      log(`🗣️ <strong>마을 광장에서 치열한 생존 토론과 동선 검증이 시작됩니다!</strong>`);
+      // 대화는 겉보기(Fake) 생존자들이 진행
+      const apparentAlive = players.filter(p => p.isFakeAlive);
+      log(`🗣️ <strong>생존자들의 치열한 팩트 체크 토론이 시작됩니다.</strong>`);
 
-      const btnDiscuss = document.getElementById('btn-discuss');
-      btnDiscuss.disabled = true;
+      document.getElementById('btn-discuss').disabled = true;
 
-      const talkers = [...alivePlayers].sort(() => Math.random() - 0.5).slice(0, Math.min(6, alivePlayers.length));
+      // 정체 드러난 악당 찾기
+      const exposedEvil = players.find(p => p.isFakeAlive && p.isRevealed && (p.role === '마피아' || p.role === '암살자'));
+      const talkers = [...apparentAlive].sort(() => Math.random() - 0.5).slice(0, Math.min(5, apparentAlive.length));
+
       let index = 0;
 
       const interval = setInterval(() => {
         if (index >= talkers.length) {
           clearInterval(interval);
-          log(`💬 충분한 토론이 이루어졌습니다. 이제 투표를 진행해 주세요.`, 'system');
+          log(`💬 토론 종료. 지목 투표 단계로 넘어갑니다.`, 'system');
           gameState.phase = 'DAY_VOTE';
           updateUI();
           return;
         }
 
-        const p = talkers[index];
-        const target = getRandomAlivePlayer([], p.id);
-        const revealedMafia = players.find(pl => pl.isAlive && pl.isRevealed && pl.role === '마피아');
-        const revealedCitizen = players.find(pl => pl.isAlive && pl.isRevealed && pl.role !== '마피아');
-
+        const speaker = talkers[index];
         let msg = "";
 
-        // 상황별 다채로운 대화 생성 로직 (반박, 동선, 의심)
-        if (revealedMafia) {
-          const mafiaRebuttals = [
-            `어이 ${revealedMafia.name}, 경찰 조사로 마피아 땅땅 박혔는데 무슨 할 말 있어요? 바닥이 너무 길네!`,
-            `경찰 결과가 완벽한데 ${revealedMafia.name}님 계속 발뺌할 건가요? 투표로 바로 끝냅시다.`,
-            `저 사람(${revealedMafia.name}) 어제부터 동선 엉성하더니 결국 마피아였잖아? 반박해봐요!`
-          ];
-          msg = mafiaRebuttals[Math.floor(Math.random() * mafiaRebuttals.length)];
-        } else if (p.role === '마피아') {
-          const mafiaDisguise = [
-            `잠깐만요, ${target ? target.name : '누구'}님 어제 밤 동선이 왜 이렇게 불분명해요? 몰아가기 하지 말고 본인 알리바이부터 대세요.`,
-            `제 동선은 확실히 광장 주변이었거든요? 오히려 ${target ? target.name : '누구'}님이 지난밤에 어디 있었는지 제대로 대답 못 하던데요?`,
-            `방금 그 발언 앞뒤가 너무 안 맞지 않아요? ${target ? target.name : '누구'}님을 진심으로 의심해 봅니다.`
-          ];
-          msg = mafiaDisguise[Math.floor(Math.random() * mafiaDisguise.length)];
-        } else if (p.role === '경찰') {
-          msg = `제 수사 라인과 교차 검증 중입니다. ${target ? target.name : '누구'}님의 행동이 평소와 달라서 예의 주시하고 있어요.`;
-        } else if (p.role === '의사') {
-          msg = `시민 여러분, 어젯밤 힐링 타이밍 좋았어요. 확실한 증거 없이 무고한 사람 잡는 반박은 삼가죠.`;
-        } else {
-          const citizenTalks = [
-            `저 ${target ? target.name : '누구'}님 의견에 반박할게요. 어제 투표 때랑 태도가 너무 바뀐 거 아니에요? 동선 인증 똑바로 하세요!`,
-            `다들 진정하시죠. ${target ? target.name : '누구'}님 말이 맞을수도 있지만, 우리 조금 더 신중하게 정황을 따져봅시다.`,
-            `저는 밤사이에 아무 소리도 못 들었는데... ${target ? target.name : '누구'}님이 자꾸 분위기 흐리는 게 촉이 안 좋아요.`
-          ];
-          msg = citizenTalks[Math.floor(Math.random() * citizenTalks.length)];
+        // 1. 확정 악인(마피아/암살자)이 드러난 경우: 전원이 몰아붙임
+        if (exposedEvil) {
+          if (speaker.id === exposedEvil.id) {
+            msg = `경찰 조사는 조작입니다! 제발 저를 믿어주세요. 억울합니다!`;
+          } else {
+            const acc = [
+              `경찰 조사로 <strong>${exposedEvil.name}</strong>님이 악당인 게 명백해졌습니다. 딴 말 필요 없이 투표하죠!`,
+              `어이 <strong>${exposedEvil.name}</strong>, 발뺌해 봤자 소용없어. 투표 표 몰아줍시다.`,
+              `더 이상 명분이 없네요. 이번 턴은 <strong>${exposedEvil.name}</strong>님 처형으로 확정입니다.`
+            ];
+            msg = acc[Math.floor(Math.random() * acc.length)];
+          }
+        } 
+        // 2. 일반 토론 (동선 추궁 및 반박)
+        else {
+          const other = apparentAlive[Math.floor(Math.random() * apparentAlive.length)];
+          if (speaker.role === '마피아' || speaker.role === '암살자') {
+            msg = `저는 어제 내내 집 앞에 있었어요. 오히려 <strong>${other.name}</strong>님 동선이 모호하던데 해명하시죠.`;
+          } else if (speaker.role === '경찰') {
+            msg = `수사망을 계속 넓히고 있습니다. 섣부른 조작 발언에 현혹되지 마세요.`;
+          } else {
+            const cit = [
+              `조용히 눈치만 보는 <strong>${other.name}</strong>님, 의심스러운데 한 마디 해보시죠?`,
+              `방금 주장은 앞뒤가 안 맞잖아요. 정황상 동선이 맞는 사람부터 챙겨야 합니다.`,
+              `억울한 시민이 죽지 않도록 신중하게 표를 행사합시다.`
+            ];
+            msg = cit[Math.floor(Math.random() * cit.length)];
+          }
         }
 
-        log(`💬 <strong>[${p.name}]</strong>: "${msg}"`, 'chat');
+        log(`💬 <strong>[${speaker.name}]</strong>: "${msg}"`, 'chat');
         index++;
       }, 1000);
     }
 
     function processVote() {
-      log(`🗳️ 광장 투표가 시작되었습니다...`);
-      const alivePlayers = players.filter(p => p.isAlive);
+      log(`🗳️ 광장 투표 집계...`);
+      const apparentAlive = players.filter(p => p.isFakeAlive);
       let votes = {};
       let invalidVotes = 0;
 
-      const revealedMafia = players.find(pl => pl.isAlive && pl.isRevealed && pl.role === '마피아');
+      const exposedEvil = players.find(p => p.isFakeAlive && p.isRevealed && (p.role === '마피아' || p.role === '암살자'));
 
-      alivePlayers.forEach(p => {
-        if (Math.random() < 0.1) { // 10% 무효표 (무효표 가능 기능 반영)
+      apparentAlive.forEach(p => {
+        // 실제 사망했지만 암살 위장 상태인 플레이어는 투표 불능(무효표 처리)
+        if (!p.isRealAlive && p.isFakeAlive) {
+          invalidVotes++;
+          return;
+        }
+
+        if (Math.random() < 0.1) { // 10% 무효표
           invalidVotes++;
         } else {
           let target = null;
-          if (revealedMafia && Math.random() < 0.9 && p.id !== revealedMafia.id) {
-            target = revealedMafia; // 확정 마피아에게 응집
+          // 직업 드러난 악당이 있으면 95% 확률로 지정 투표
+          if (exposedEvil && Math.random() < 0.95 && p.id !== exposedEvil.id) {
+            target = exposedEvil;
           } else {
-            target = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+            target = apparentAlive[Math.floor(Math.random() * apparentAlive.length)];
           }
           votes[target.id] = (votes[target.id] || 0) + 1;
         }
       });
 
-      log(`📊 <strong>투표함 개봉 결과</strong> (무효/기권표: ${invalidVotes}표)`);
-      
+      log(`📊 <strong>투표 개봉</strong> (무효/기권/미작동 표: ${invalidVotes}표)`);
+
       let maxVotes = 0;
       let executedId = null;
       let isTie = false;
@@ -537,31 +583,32 @@ html_code = """
       }
 
       if (isTie || !executedId) {
-        log(`⚖️ 표가 갈리거나 무효표가 과반을 넘겨 이번 라운드 처형자는 없습니다.`, 'system');
+        log(`⚖️ 동표 또는 무효표로 처형자가 나오지 않았습니다.`, 'system');
       } else {
         const dead = players.find(p => p.id == executedId);
-        dead.isAlive = false;
-        log(`⚖️ 투표 결과, 최다 득표자(${maxVotes}표)인 <strong>${dead.name}</strong>님이 처형되었습니다! (정체: ${dead.role})`, 'system');
+        dead.isRealAlive = false;
+        dead.isFakeAlive = false;
+        log(`⚖️ 투표 결과, 최다 표를 받은 <strong>${dead.name}</strong>님이 처형되었습니다! (정체: ${dead.role})`, 'system');
       }
 
       if (checkGameOver()) return;
 
       gameState.day++;
       gameState.phase = 'NIGHT';
-      log(`🌙 다시 밤이 찾아왔습니다. [밤 행동 실행] 버튼을 눌러주세요.`);
+      log(`🌙 다시 밤이 옵니다.`);
       updateUI();
     }
 
     function checkGameOver() {
-      const aliveMafia = players.filter(p => p.isAlive && p.role === '마피아').length;
-      const aliveCitizen = players.filter(p => p.isAlive && p.role !== '마피아').length;
+      const realEvilCount = players.filter(p => p.isRealAlive && (p.role === '마피아' || p.role === '암살자')).length;
+      const realGoodCount = players.filter(p => p.isRealAlive && (p.role !== '마피아' && p.role !== '암살자')).length;
 
-      if (aliveMafia === 0) {
-        log(`🎉 <strong>시민팀 승리!</strong> 모든 마피아를 색출해냈습니다!`, 'system');
+      if (realEvilCount === 0) {
+        log(`🎉 <strong>시민팀 승리!</strong> 모든 악당(마피아/암살자)을 소탕했습니다!`, 'system');
         disableAllButtons();
         return true;
-      } else if (aliveMafia >= aliveCitizen) {
-        log(`☠️ <strong>마피아팀 승리!</strong> 마피아 세력이 시민 수를 압도했습니다!`, 'system');
+      } else if (realEvilCount >= realGoodCount) {
+        log(`☠️ <strong>악당 세력(마피아/암살자) 승리!</strong> 도시를 차지했습니다!`, 'system');
         disableAllButtons();
         return true;
       }
@@ -580,4 +627,4 @@ html_code = """
 </html>
 """
 
-components.html(html_code, height=900, scrolling=True)
+components.html(html_code, height=920, scrolling=True)
